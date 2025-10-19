@@ -22,13 +22,47 @@ const uploadResume = async (req, res) => {
     // Find or create candidate
     let candidate = await Candidate.findOne({ userId });
     if (!candidate) {
-      // Create candidate if doesn't exist
-      candidate = new Candidate({
-        userId,
-        name: req.user.name || 'Unknown',
-        email: req.user.email || 'unknown@example.com'
-      });
+      // Fetch user details from auth service
+      const axios = require('axios');
+      try {
+        const authResponse = await axios.get(`${process.env.AUTH_SERVICE_URL}/auth/profile`, {
+          headers: { Authorization: req.headers.authorization }
+        });
+        const userData = authResponse.data;
+
+        // Create candidate with actual user data
+        candidate = new Candidate({
+          userId,
+          name: userData.name,
+          email: userData.email
+        });
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+        // Fallback to JWT data if auth service is unavailable
+        candidate = new Candidate({
+          userId,
+          name: req.user.name || 'Unknown',
+          email: req.user.email || 'unknown@example.com'
+        });
+      }
       await candidate.save();
+    } else {
+      // Update existing candidate with correct data if it has default values
+      if (candidate.name === 'Unknown' || candidate.email === 'unknown@example.com') {
+        const axios = require('axios');
+        try {
+          const authResponse = await axios.get(`${process.env.AUTH_SERVICE_URL}/auth/profile`, {
+            headers: { Authorization: req.headers.authorization }
+          });
+          const userData = authResponse.data;
+
+          candidate.name = userData.name;
+          candidate.email = userData.email;
+          await candidate.save();
+        } catch (error) {
+          console.error('Failed to update user data:', error);
+        }
+      }
     }
 
     // Create resume record
